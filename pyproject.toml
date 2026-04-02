@@ -1,0 +1,11 @@
+[project]
+name = "p20260402-aws-terraform"
+version = "0.1.0"
+description = "Add your description here"
+requires-python = ">=3.12"
+dependencies = [
+    "boto3>=1.42.81",
+    "pyyaml>=6.0.3",
+    "requests>=2.33.1",
+    "rich>=14.3.3",
+]

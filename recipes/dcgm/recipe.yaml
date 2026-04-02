@@ -1,0 +1,7 @@
+name: NVIDIA DCGM
+description: "Data Center GPU Manager — GPU health monitoring, diagnostics, and telemetry"
+version: "4"
+url: https://docs.nvidia.com/datacenter/dcgm/latest/user-guide/getting-started.html
+gpu_vendors:
+  - NVIDIA
+verify_command: "dcgmi discovery -l"

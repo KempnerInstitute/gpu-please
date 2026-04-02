@@ -1,0 +1,19 @@
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.backup
+.terraform.lock.hcl
+
+# SSH keys
+*.pem
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Workspaces (contain state + keys)
+workspaces/
+
+# Pricing cache
+.pricing_cache/
