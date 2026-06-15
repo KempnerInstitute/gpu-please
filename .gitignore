@@ -2,18 +2,59 @@
 .terraform/
 *.tfstate
 *.tfstate.backup
+*.tfvars
+*.tfvars.json
+!terraform.tfvars.example
+*.tfplan
+tfplan*
 .terraform.lock.hcl
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
 
 # SSH keys
 *.pem
+*.key
+*.ppk
+id_rsa
+id_rsa.*
+id_ed25519
+id_ed25519.*
 
 # Python
 __pycache__/
 *.pyc
 .venv/
+*.egg-info/
+*.egg
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
 
 # Workspaces (contain state + keys)
 workspaces/
 
 # Pricing cache
 .pricing_cache/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# AWS
+.aws/
+credentials
+aws-credentials*
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+*.swp
+*.swo

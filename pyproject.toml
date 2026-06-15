@@ -1,7 +1,7 @@
 [project]
-name = "p20260402-aws-terraform"
+name = "aws-terraform"
 version = "0.1.0"
-description = "Add your description here"
+description = "CLI tool to provision AWS GPU EC2 instances via Terraform with optional post-provisioning recipe installation"
 requires-python = ">=3.12"
 dependencies = [
     "boto3>=1.42.81",

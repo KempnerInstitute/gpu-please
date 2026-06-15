@@ -123,6 +123,12 @@ resource "aws_instance" "gpu" {
   vpc_security_group_ids      = [aws_security_group.gpu_ssh.id]
   associate_public_ip_address = true
 
+  user_data = <<-EOF
+    #!/bin/bash
+    set -e
+    curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin sh
+  EOF
+
   root_block_device {
     volume_size = var.root_volume_size_gb
     volume_type = "gp3"
