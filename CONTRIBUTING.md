@@ -5,8 +5,8 @@ Thanks for your interest in this project. Bug reports, fixes, new software recip
 ## Development setup
 
 ```bash
-git clone https://github.com/KempnerInstitute/aws-gpu-instance-provisioner.git
-cd aws-gpu-instance-provisioner
+git clone https://github.com/KempnerInstitute/gpu-please.git
+cd gpu-please
 uv sync
 ```
 
@@ -71,7 +71,7 @@ Before opening a PR, please confirm:
 
 ## Reporting bugs
 
-Open an issue at <https://github.com/KempnerInstitute/aws-gpu-instance-provisioner/issues> with:
+Open an issue at <https://github.com/KempnerInstitute/gpu-please/issues> with:
 
 - What command you ran (e.g. `uv run provision.py --ami pytorch`).
 - The full error output (redact any account IDs / IPs if sharing publicly).

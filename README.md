@@ -91,8 +91,8 @@ For a quick sandbox, the AWS-managed `AmazonEC2FullAccess` + `AmazonS3FullAccess
 ## Quickstart
 
 ```bash
-git clone https://github.com/KempnerInstitute/aws-gpu-instance-provisioner.git
-cd aws-gpu-instance-provisioner
+git clone https://github.com/KempnerInstitute/gpu-please.git
+cd gpu-please
 uv sync
 uv run provision.py
 ```

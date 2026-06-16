@@ -1,5 +1,5 @@
 [project]
-name = "aws-gpu-instance-provisioner"
+name = "gpu-please"
 version = "0.1.0"
 description = "CLI to provision AWS GPU EC2 instances via Terraform, with optional storage (S3/EBS/EFS) and post-provisioning software recipes."
 readme = "README.md"
@@ -44,6 +44,6 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/KempnerInstitute/aws-gpu-instance-provisioner"
-Repository = "https://github.com/KempnerInstitute/aws-gpu-instance-provisioner"
-Issues = "https://github.com/KempnerInstitute/aws-gpu-instance-provisioner/issues"
+Homepage = "https://github.com/KempnerInstitute/gpu-please"
+Repository = "https://github.com/KempnerInstitute/gpu-please"
+Issues = "https://github.com/KempnerInstitute/gpu-please/issues"
