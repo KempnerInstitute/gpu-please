@@ -298,7 +298,43 @@ In every non-`none` case, a soft link `~/storage` is created in the `ubuntu` use
 
 ## AMI
 
-The instance uses the AWS **Deep Learning Base OSS Nvidia Driver GPU AMI (Ubuntu 22.04)**, looked up by name pattern in `terraform/main.tf`. The login user is `ubuntu`. If AWS retires that AMI name or it isn't published in your region, the `data.aws_ami.dlami` lookup will fail with "no matching AMI found" — find the current AMI name in the EC2 console (Images → AMI Catalog) and update the `values` filter in `terraform/main.tf`.
+The instance image is picked by name pattern via `data.aws_ami.dlami` in `terraform/main.tf`. The login user is always `ubuntu`. The exact AMI flavor is controlled by `--ami` (default `pytorch`):
+
+| `--ami` | AWS AMI pattern | What's inside |
+|---|---|---|
+| `pytorch` (**default**) | `Deep Learning OSS Nvidia Driver AMI GPU PyTorch * (Ubuntu 22.04)*` | NVIDIA OSS drivers + CUDA + cuDNN + NCCL + PyTorch + Python |
+| `tensorflow` | `Deep Learning OSS Nvidia Driver AMI GPU TensorFlow * (Ubuntu 22.04)*` | NVIDIA OSS drivers + CUDA + cuDNN + NCCL + TensorFlow + Python |
+| `base` | `Deep Learning Base OSS Nvidia Driver GPU AMI (Ubuntu 22.04)*` | NVIDIA OSS drivers + CUDA + cuDNN — **no ML frameworks** |
+
+Pick `base` if you plan to install your own framework / build from source and want a leaner image.
+
+### Activating the framework venv
+
+AWS DLAMIs ship PyTorch / TensorFlow inside a dedicated virtualenv at `/opt/<framework>/` — they are **not** on the default `python3` path. After SSH'ing in, activate it explicitly:
+
+```bash
+# PyTorch DLAMI
+source /opt/pytorch/bin/activate
+python -c 'import torch; print(torch.cuda.is_available()); print(torch.__version__)'
+# True
+# 2.7.x+cu128
+
+# TensorFlow DLAMI
+source /opt/tensorflow/bin/activate
+python -c 'import tensorflow as tf; print(tf.config.list_physical_devices("GPU"))'
+```
+
+To auto-activate on every new SSH session, append it to `~/.bashrc`:
+
+```bash
+echo 'source /opt/pytorch/bin/activate' >> ~/.bashrc
+```
+
+If the venv isn't at `/opt/<framework>/`, check `cat /etc/motd` — the DLAMI banner prints the exact activation command for the running image.
+
+### When AWS retires an AMI pattern
+
+If a pattern matches no AMIs in your region the `data.aws_ami.dlami` lookup fails with "no matching AMI found" — find the current AMI name in the EC2 console (Images → AMI Catalog → AWS Marketplace → Deep Learning) and update `AMI_PATTERNS` in `provision.py`.
 
 ## Notes
 

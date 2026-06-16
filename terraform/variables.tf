@@ -41,6 +41,14 @@ variable "ami_architecture" {
   default     = "x86_64"
 }
 
+variable "ami_name_pattern" {
+  description = "AMI Name filter pattern (used by the data.aws_ami.dlami lookup). provision.py sets this from the --ami CLI flag — pytorch (default), tensorflow, or base."
+  type        = string
+  # Default pattern matches the full PyTorch DLAMI: NVIDIA drivers + CUDA +
+  # cuDNN + NCCL + PyTorch + Python pre-installed.
+  default = "Deep Learning OSS Nvidia Driver AMI GPU PyTorch * (Ubuntu 22.04)*"
+}
+
 variable "storage_type" {
   description = "Additional storage type to attach: s3, ebs, efs, or none. Resources are created conditionally in main.tf."
   type        = string

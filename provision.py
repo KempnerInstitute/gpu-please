@@ -569,6 +569,17 @@ STORAGE_TYPES = ("s3", "ebs", "efs")
 DEFAULT_STORAGE_TYPE = "ebs"
 DEFAULT_STORAGE_SIZE_GB = 100
 
+# Maps the user-friendly --ami choice to the actual AWS AMI Name filter pattern.
+# "pytorch"  → full DLAMI with PyTorch + CUDA + cuDNN + NCCL + drivers (recommended default)
+# "tensorflow" → full DLAMI with TensorFlow + CUDA + cuDNN + NCCL + drivers
+# "base"     → minimal DLAMI: NVIDIA OSS drivers + CUDA + cuDNN, no frameworks
+AMI_PATTERNS = {
+    "pytorch": "Deep Learning OSS Nvidia Driver AMI GPU PyTorch * (Ubuntu 22.04)*",
+    "tensorflow": "Deep Learning OSS Nvidia Driver AMI GPU TensorFlow * (Ubuntu 22.04)*",
+    "base": "Deep Learning Base OSS Nvidia Driver GPU AMI (Ubuntu 22.04)*",
+}
+DEFAULT_AMI = "pytorch"
+
 
 def _probe_storage_permissions(storage_type: str, region: str) -> str | None:
     """Probe whether current AWS credentials can create the chosen storage type.
@@ -1365,6 +1376,7 @@ def provision_flow(
     pricing_source: str = DEFAULT_PRICING_SOURCE,
     region: str = DEFAULT_REGION,
     cli_iam_profile: str | None = None,
+    ami_choice: str = DEFAULT_AMI,
 ) -> None:
     """Main provisioning flow: select instance → terraform apply → print SSH command."""
     # Preflight credentials so a missing/expired identity surfaces as a single
@@ -1429,6 +1441,11 @@ def provision_flow(
     ami_arch = _ami_arch_for_instance(selected)
 
     # Write tfvars
+    ami_name_pattern = AMI_PATTERNS[ami_choice]
+    console.print(
+        f"  AMI flavor: [cyan]{ami_choice}[/cyan]  "
+        f"[dim](filter: {ami_name_pattern})[/dim]"
+    )
     write_tfvars(ws, {
         "region": region,
         "availability_zone": az,
@@ -1437,6 +1454,7 @@ def provision_flow(
         "workspace_name": workspace_name,
         "allowed_ssh_cidr": f"{my_ip}/32",
         "ami_architecture": ami_arch,
+        "ami_name_pattern": ami_name_pattern,
         "storage_type": storage_type,
         "storage_size_gb": storage_size_gb,
         "iam_instance_profile_name": iam_instance_profile_name,
@@ -1890,6 +1908,18 @@ def main() -> None:
             "The selected region is persisted to ~/.config/aws-terraform-provisioner/config.json."
         ),
     )
+    parser.add_argument(
+        "--ami",
+        choices=tuple(AMI_PATTERNS.keys()),
+        default=DEFAULT_AMI,
+        help=(
+            f"Which AWS Deep Learning AMI to use (default: {DEFAULT_AMI}). "
+            "'pytorch' = full DLAMI with PyTorch + CUDA + cuDNN + NCCL + drivers. "
+            "'tensorflow' = full DLAMI with TensorFlow instead of PyTorch. "
+            "'base' = minimal DLAMI with only NVIDIA OSS drivers + CUDA + cuDNN "
+            "(no frameworks pre-installed)."
+        ),
+    )
 
     args = parser.parse_args()
 
@@ -1927,6 +1957,7 @@ def main() -> None:
             args.pricing_source,
             region,
             cli_iam_profile=args.iam_instance_profile,
+            ami_choice=args.ami,
         )
 
 
