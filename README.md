@@ -193,7 +193,7 @@ Recipes live in the `recipes/` directory. Each recipe is a subdirectory containi
 ```
 ├── provision.py              # CLI entry point
 ├── pyproject.toml            # Python project + dependencies (uv)
-├── aws_gpu_instances_*.json  # GPU instance catalog snapshot
+├── aws_gpu_instances.json    # GPU instance catalog snapshot
 ├── terraform/
 │   ├── main.tf               # EC2, VPC, security group, AMI data source, user_data
 │   ├── variables.tf          # Input variables

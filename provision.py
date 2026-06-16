@@ -1855,8 +1855,8 @@ def main() -> None:
     )
     parser.add_argument(
         "--instances-file",
-        default=str(SCRIPT_DIR / "aws_gpu_instances_2026-04-01.json"),
-        help="Path to the GPU instances JSON file (default: aws_gpu_instances_2026-04-01.json)",
+        default=str(SCRIPT_DIR / "aws_gpu_instances.json"),
+        help="Path to the GPU instances JSON file (default: aws_gpu_instances.json)",
     )
     parser.add_argument(
         "--pricing-source",
