@@ -16,8 +16,17 @@ CLI tool to provision GPU EC2 instances on AWS using Terraform.
 - [Terraform](https://developer.hashicorp.com/terraform/install) on `$PATH`
 
   ```bash
+  # macOS (per HashiCorp's official instructions — `brew install terraform` no longer works directly)
+  brew tap hashicorp/tap
+  brew install hashicorp/tap/terraform
+  # other platforms: see the link above
+  ```
+
+- [AWS CLI](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) (needed for `aws configure` below, plus any manual AWS work like creating an IAM instance profile)
+
+  ```bash
   # macOS
-  brew install terraform
+  brew install awscli
   # other platforms: see the link above
   ```
 
@@ -30,7 +39,6 @@ The tool uses `boto3` and Terraform's AWS provider, so it picks up credentials f
 **Option A — `aws configure` (recommended for laptops):**
 
 ```bash
-# install the AWS CLI first, e.g.:  brew install awscli
 aws configure
 # AWS Access Key ID:     AKIA...
 # AWS Secret Access Key: ...
@@ -219,7 +227,7 @@ Make sure your account has GPU instance quota in the chosen region — new accou
 After picking an instance, `provision.py` asks two questions:
 
 ```
-Storage type (s3, ebs, efs, none) default: s3:
+Storage type (s3, ebs, efs, none) default: ebs:
 Storage size in GB default: 100:
 ```
 

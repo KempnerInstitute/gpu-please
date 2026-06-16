@@ -534,7 +534,7 @@ def display_table(instances: list[dict], prices: dict[str, float | None]) -> Non
 
 
 STORAGE_TYPES = ("s3", "ebs", "efs", "none")
-DEFAULT_STORAGE_TYPE = "s3"
+DEFAULT_STORAGE_TYPE = "ebs"
 DEFAULT_STORAGE_SIZE_GB = 100
 
 
