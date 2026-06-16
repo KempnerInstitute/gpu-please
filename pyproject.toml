@@ -1,11 +1,49 @@
 [project]
-name = "aws-terraform"
+name = "aws-gpu-instance-provisioner"
 version = "0.1.0"
-description = "CLI tool to provision AWS GPU EC2 instances via Terraform with optional post-provisioning recipe installation"
+description = "CLI to provision AWS GPU EC2 instances via Terraform, with optional storage (S3/EBS/EFS) and post-provisioning software recipes."
+readme = "README.md"
 requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [
+    { name = "Kempner Institute for the Study of Natural and Artificial Intelligence at Harvard University" },
+]
+keywords = [
+    "aws",
+    "ec2",
+    "gpu",
+    "terraform",
+    "provisioning",
+    "deep-learning",
+    "pytorch",
+    "tensorflow",
+    "cuda",
+    "dlami",
+    "mountpoint-s3",
+    "dcgm",
+    "cli",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: System :: Systems Administration",
+]
 dependencies = [
     "boto3>=1.42.81",
     "pyyaml>=6.0.3",
     "requests>=2.33.1",
     "rich>=14.3.3",
 ]
+
+[project.urls]
+Homepage = "https://github.com/KempnerInstitute/aws-gpu-instance-provisioner"
+Repository = "https://github.com/KempnerInstitute/aws-gpu-instance-provisioner"
+Issues = "https://github.com/KempnerInstitute/aws-gpu-instance-provisioner/issues"

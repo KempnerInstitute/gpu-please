@@ -20,6 +20,7 @@ CLI tool to provision GPU EC2 instances on AWS using Terraform.
   ```bash
   # macOS (per HashiCorp's official instructions — `brew install terraform` no longer works directly)
   brew tap hashicorp/tap
+  brew trust hashicorp/tap          # Homebrew 6.x requires explicit trust on third-party taps
   brew install hashicorp/tap/terraform
   # other platforms: see the link above
   ```
@@ -87,6 +88,15 @@ The principal you provision with needs:
 
 For a quick sandbox, the AWS-managed `AmazonEC2FullAccess` + `AmazonS3FullAccess` + `AmazonElasticFileSystemFullAccess` cover everything (no `IAMFullAccess` needed). For production, write a tight customer-managed policy with only the actions above.
 
+## Quickstart
+
+```bash
+git clone https://github.com/KempnerInstitute/aws-gpu-instance-provisioner.git
+cd aws-gpu-instance-provisioner
+uv sync
+uv run provision.py
+```
+
 ## Setup
 
 ```bash
@@ -109,6 +119,17 @@ aws ec2 describe-instance-type-offerings \
 If all four succeed, you're ready to provision.
 
 ## Usage
+
+> [!NOTE]
+> **Read every error message carefully.** Most failures you'll hit while running this tool are *AWS-side* — your account, your IAM, your quotas — not bugs in the tool. The error text from boto3 / Terraform is almost always actionable. Common examples:
+>
+> - `VpcLimitExceeded` → your account is at the per-region VPC cap (default 5). Delete an unused VPC or request a quota increase via [Service Quotas → VPCs per region](https://console.aws.amazon.com/servicequotas/home/services/vpc/quotas).
+> - `VcpuLimitExceeded` / `Unsupported instance type` → your account doesn't have the on-demand vCPU quota for that GPU family in the region. Request an increase via [Service Quotas → EC2 → "Running On-Demand G and VT instances" / "Running On-Demand P instances"](https://console.aws.amazon.com/servicequotas/home/services/ec2/quotas).
+> - `AccessDenied: ec2:Foo` / `iam:Foo` / `s3:Foo` → your IAM principal is missing that action; ask whoever administers your AWS account to attach it (or use a different storage type that doesn't need it — see [Storage](#storage)).
+> - `InsufficientInstanceCapacity` → AWS has no spare hardware of that exact type in that AZ right now. Retry, try a different region, or pick a more available instance family (`g4dn`, `g5`, `g6`).
+> - `OptInRequired` → the region isn't enabled for your account. Enable it at [Billing → Account](https://console.aws.amazon.com/billing/home#/account).
+>
+> The provisioner translates these into one-line messages with the exact IAM action / quota / setting to fix. If you're stuck, paste the error into the AWS console search — AWS docs usually link the resolution page directly.
 
 ### Provision an instance
 
@@ -159,6 +180,14 @@ Notes:
 - The `.pem` is created with mode `400` automatically.
 - SSH is locked to your public IP at provision time. If your IP changes (new network, VPN toggled), either edit the security group's ingress rule in the AWS console, or destroy and re-provision.
 
+### Connect to a provisioned instance
+
+```bash
+uv run provision.py --connect
+```
+
+Shows a picker of active instances; once you select one it prints the `ssh -i ... ubuntu@<ip>` command, plus a ready-to-paste `~/.ssh/config` block for VS Code Remote-SSH. If you just typed `uv run provision.py` with no flag and you have existing instances, the entry menu already gives you a one-key shortcut (`c`) to this same flow.
+
 ### List provisioned instances
 
 ```bash
@@ -195,9 +224,11 @@ Recipes live in the `recipes/` directory. Each recipe is a subdirectory containi
 ├── pyproject.toml            # Python project + dependencies (uv)
 ├── aws_gpu_instances.json    # GPU instance catalog snapshot
 ├── terraform/
-│   ├── main.tf               # EC2, VPC, security group, AMI data source, user_data
-│   ├── variables.tf          # Input variables
-│   └── outputs.tf            # public_ip, instance_id, ami_id
+│   ├── main.tf               # VPC + subnet + IGW + SG + AMI lookup + EC2 instance
+│   ├── variables.tf          # Input variables (region, instance_type, storage_type, ...)
+│   ├── outputs.tf            # public_ip, instance_id, ami_id, storage_mount_point, ...
+│   ├── storage.tf            # Conditional S3 bucket / EBS volume / EFS resources
+│   └── user_data.sh.tpl      # Cloud-init template: uv install + storage mount + ~/storage symlink
 ├── recipes/                  # Post-provisioning software recipes
 │   └── dcgm/
 │       ├── recipe.yaml       # Recipe metadata
@@ -229,7 +260,7 @@ Make sure your account has GPU instance quota in the chosen region — new accou
 After picking an instance, `provision.py` asks two questions:
 
 ```
-Storage type (s3, ebs, efs, none) default: ebs:
+Storage type (s3, ebs, efs) default: ebs:
 Storage size in GB default: 100:
 ```
 

@@ -6,7 +6,6 @@ import json
 import os
 import re
 import shutil
-import stat
 import subprocess
 import sys
 import time
@@ -339,10 +338,25 @@ def _save_pricing_cache(region: str, source: str, prices: dict[str, float | None
 
 
 def _load_pricing_cache(cache_path: Path) -> dict[str, float | None]:
-    """Load pricing data from a cache file."""
-    with open(cache_path) as f:
-        raw = json.load(f)
-    return {k: (float(v) if v is not None else None) for k, v in raw.items()}
+    """Load pricing data from a cache file.
+
+    If the file is corrupted, delete it and return an empty dict so the next
+    `fetch_pricing` call refreshes — one bad cache shouldn't crash the tool.
+    """
+    try:
+        with open(cache_path) as f:
+            raw = json.load(f)
+        return {k: (float(v) if v is not None else None) for k, v in raw.items()}
+    except (OSError, json.JSONDecodeError, TypeError, ValueError) as e:
+        console.print(
+            f"  [yellow]Pricing cache {cache_path.name} unreadable ({type(e).__name__}: {e}); "
+            "removing it and re-fetching.[/yellow]"
+        )
+        try:
+            cache_path.unlink()
+        except OSError:
+            pass
+        return {}
 
 
 def fetch_pricing(
@@ -409,7 +423,14 @@ def fetch_pricing_aws_api(
     """
     # The Pricing API is only available in us-east-1 and ap-south-1
     pricing = boto3.client("pricing", region_name="us-east-1")
-    location = REGION_NAME_MAP.get(region, "US East (N. Virginia)")
+    location = REGION_NAME_MAP.get(region)
+    if location is None:
+        console.print(
+            f"  [yellow]Region {region!r} is not in REGION_NAME_MAP; "
+            "Pricing API would return wrong results. Skipping pricing for this run — "
+            "consider --pricing-source=vantage which supports all regions.[/yellow]"
+        )
+        return {it: None for it in instance_types}
 
     prices: dict[str, float | None] = {}
     first_error: Exception | None = None
@@ -698,8 +719,10 @@ def prompt_storage_options(region: str = DEFAULT_REGION) -> tuple[str, int]:
     for t in STORAGE_TYPES:
         availability[t] = _probe_storage_permissions(t, region)
 
-    # Default to the first available type in preference order.
-    preference = (DEFAULT_STORAGE_TYPE, "ebs", "efs", "s3")
+    # Default to the first available type in preference order. The default
+    # storage type comes first; if it's unavailable we fall through to the
+    # other supported types.
+    preference = (DEFAULT_STORAGE_TYPE,) + tuple(t for t in STORAGE_TYPES if t != DEFAULT_STORAGE_TYPE)
     default_type = next(
         (t for t in preference if availability.get(t) is None), DEFAULT_STORAGE_TYPE
     )
@@ -946,6 +969,25 @@ def _check_terraform() -> str:
     return tf
 
 
+def _check_ssh_tools() -> None:
+    """Verify ssh + scp are on PATH. Exit cleanly with an actionable message if not.
+
+    Required for the recipe-install path (_wait_for_ssh, _wait_for_cloud_init,
+    install_recipe_on_instance). Without this check, subprocess.run raises a
+    bare FileNotFoundError on hosts without OpenSSH (some minimal containers /
+    Windows without OpenSSH client).
+    """
+    missing = [tool for tool in ("ssh", "scp") if shutil.which(tool) is None]
+    if missing:
+        console.print(
+            f"[red]Error: {', '.join(missing)} not found on PATH.[/red] "
+            "Install an OpenSSH client (macOS: built-in; Ubuntu/Debian: "
+            "`sudo apt install openssh-client`; Windows: `winget install OpenSSH.Client` "
+            "or use WSL)."
+        )
+        sys.exit(1)
+
+
 _INCOMPLETE_LOCK_WARNING_RE = re.compile(
     r"╷\s*\n(?:│[^\n]*\n)*?│\s*Warning: Incomplete lock file information"
     r"(?:[^╵])*?╵\s*\n?",
@@ -1177,6 +1219,7 @@ def _wait_for_ssh(
     pem_path: Path, public_ip: str, timeout: int = 300
 ) -> bool:
     """Poll SSH on the instance until it accepts a connection or timeout elapses."""
+    _check_ssh_tools()
     console.print(f"  Waiting for SSH on [cyan]{public_ip}[/cyan] (up to {timeout}s)...")
     ssh_opts = [
         "-i", str(pem_path),
