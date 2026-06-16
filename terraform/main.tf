@@ -123,11 +123,17 @@ resource "aws_instance" "gpu" {
   vpc_security_group_ids      = [aws_security_group.gpu_ssh.id]
   associate_public_ip_address = true
 
-  user_data = <<-EOF
-    #!/bin/bash
-    set -e
-    curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin sh
-  EOF
+  # Attach a user-supplied instance profile if one was provided.
+  # This app does not create IAM resources — the profile must exist already
+  # and must have the S3 permissions needed for mountpoint-s3 when storage_type=s3.
+  iam_instance_profile = var.iam_instance_profile_name != "" ? var.iam_instance_profile_name : null
+
+  user_data = templatefile("${path.module}/user_data.sh.tpl", {
+    storage_type  = var.storage_type
+    bucket_name   = local.is_s3 ? aws_s3_bucket.storage[0].id : ""
+    efs_dns       = local.is_efs ? aws_efs_file_system.storage[0].dns_name : ""
+    ebs_volume_id = local.is_ebs ? aws_ebs_volume.storage[0].id : ""
+  })
 
   root_block_device {
     volume_size = var.root_volume_size_gb
@@ -137,4 +143,10 @@ resource "aws_instance" "gpu" {
   tags = {
     Name = var.workspace_name
   }
+
+  # Ensure the EFS mount target exists before the instance boots and
+  # user_data tries to mount it.
+  depends_on = [
+    aws_efs_mount_target.storage,
+  ]
 }

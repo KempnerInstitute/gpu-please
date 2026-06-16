@@ -35,3 +35,25 @@ variable "ami_architecture" {
   type        = string
   default     = "x86_64"
 }
+
+variable "storage_type" {
+  description = "Additional storage type to attach: s3, ebs, efs, or none. Resources are created conditionally in main.tf."
+  type        = string
+  default     = "none"
+  validation {
+    condition     = contains(["s3", "ebs", "efs", "none"], var.storage_type)
+    error_message = "storage_type must be one of: s3, ebs, efs, none."
+  }
+}
+
+variable "storage_size_gb" {
+  description = "Size of additional storage in GB. Used for EBS data volumes; informational for s3/efs (pay-as-you-go)."
+  type        = number
+  default     = 100
+}
+
+variable "iam_instance_profile_name" {
+  description = "Name of an existing IAM instance profile to attach to the EC2 instance. Required for storage_type=s3 (so mountpoint-s3 can authenticate). Leave empty for no profile."
+  type        = string
+  default     = ""
+}

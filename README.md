@@ -67,9 +67,15 @@ The principal you provision with needs:
 - **VPC + networking:** `CreateVpc`, `DeleteVpc`, `DescribeVpcs`, `CreateSubnet`, `DeleteSubnet`, `DescribeSubnets`, `CreateInternetGateway`, `AttachInternetGateway`, `DetachInternetGateway`, `DeleteInternetGateway`, `DescribeInternetGateways`, `CreateRouteTable`, `CreateRoute`, `AssociateRouteTable`, `DisassociateRouteTable`, `DeleteRouteTable`, `DescribeRouteTables`
 - **Security groups:** `CreateSecurityGroup`, `AuthorizeSecurityGroupIngress`, `AuthorizeSecurityGroupEgress`, `RevokeSecurityGroupIngress`, `RevokeSecurityGroupEgress`, `DeleteSecurityGroup`, `DescribeSecurityGroups`
 - **Tagging:** `CreateTags`, `DeleteTags`, `DescribeTags`
-- **Pricing API:** `pricing:GetProducts` (always called in `us-east-1`, regardless of where you deploy)
+- **Pricing API:** `pricing:GetProducts` — **optional**, only needed if you pass `--pricing-source=aws-api`. The default `--pricing-source=vantage` fetches public pricing data with no AWS auth.
 
-For a quick sandbox, the AWS-managed `AmazonEC2FullAccess` policy plus an inline policy granting `pricing:GetProducts` is sufficient. For production, write a tight customer-managed policy with only the actions above.
+**Additional permissions when using `storage_type` ≠ `none`:**
+
+- **S3 storage (`storage_type=s3`):** `s3:CreateBucket`, `s3:DeleteBucket`, `s3:PutBucketTagging`, `s3:GetBucketLocation` (for the bucket the app creates), plus `iam:PassRole` for the instance profile you pass in. **No `iam:Create*` is needed** — the app does not create or modify IAM resources. You set up the instance profile yourself (see [IAM setup for `s3` storage](#iam-setup-for-s3-storage) under [Storage](#storage)).
+- **EBS data volume (`storage_type=ebs`):** `ec2:CreateVolume`, `ec2:DeleteVolume`, `ec2:DescribeVolumes`, `ec2:AttachVolume`, `ec2:DetachVolume`
+- **EFS (`storage_type=efs`):** `elasticfilesystem:CreateFileSystem`, `elasticfilesystem:DeleteFileSystem`, `elasticfilesystem:DescribeFileSystems`, `elasticfilesystem:CreateMountTarget`, `elasticfilesystem:DeleteMountTarget`, `elasticfilesystem:DescribeMountTargets`
+
+For a quick sandbox, the AWS-managed `AmazonEC2FullAccess` + `AmazonS3FullAccess` + `AmazonElasticFileSystemFullAccess` cover everything (no `IAMFullAccess` needed). For production, write a tight customer-managed policy with only the actions above.
 
 ## Setup
 
@@ -107,7 +113,26 @@ This will:
 4. Create an SSH key pair, detect your public IP, and run `terraform apply`
 5. Print the SSH command to connect
 
-To use a different instance catalog, pass `--instances-file <path>`.
+To use a different instance catalog, pass `--instances-file <path>`. To switch where pricing comes from, see [Pricing source](#pricing-source) below.
+
+### Pricing source
+
+The `$/hr` column comes from one of three sources, selected with `--pricing-source`:
+
+| Value | What it does | Auth needed | Notes |
+|-------|---|---|---|
+| `vantage` (**default**) | Pulls public `instances.json` from [Vantage](https://instances.vantage.sh) | None | ~200 MB download on cache miss; cached 24h. Data is up-to-1-day stale. |
+| `aws-api` | Calls AWS Pricing API via boto3 | `pricing:GetProducts` IAM permission | Real-time AWS-native prices. Small per-call payloads, also cached 24h. |
+| `none` | Skip pricing | None | `$/hr` column shows `n/a` for everything. Fastest. |
+
+Both `vantage` and `aws-api` cache results in `.pricing_cache/` keyed by `region` + source.
+
+**Cache behavior by age:**
+- **< 24h old** — used silently, no extra network calls.
+- **≥ 24h old** — `provision.py` prompts: `Refresh from '<source>' for the latest prices? [Y/n]`. Hit Enter (or `y`) to download fresh prices; `n` to keep using the stale cache (useful when you don't want to wait on a slow Vantage download).
+- **Missing** — fetched fresh silently on the first run.
+
+If a fetch returns no prices at all (network failure for `vantage`, auth failure for `aws-api`), the all-null result is not cached, so the next run will retry.
 
 ### SSH into a provisioned instance
 
@@ -177,9 +202,89 @@ Recipes live in the `recipes/` directory. Each recipe is a subdirectory containi
 
 ## Region
 
-The tool provisions into `us-east-1` by default. To change it, edit `DEFAULT_REGION` at the top of `provision.py`. The Pricing API is always queried in `us-east-1` regardless of where you deploy (the pricing endpoint only exists in `us-east-1` and `ap-south-1`).
+On the first provision, `provision.py` prompts:
+
+```
+AWS region (default: us-east-1):
+```
+
+Hit Enter to accept the default, or type any region code (e.g. `us-west-2`, `eu-west-1`). Your selection is persisted to `~/.config/aws-terraform-provisioner/config.json` and becomes the prompt default on every subsequent run. To override without changing the saved default, pass `--region <region>` at the CLI.
+
+The Pricing API (when `--pricing-source=aws-api`) is always queried in `us-east-1` regardless of where you deploy — the AWS pricing endpoint only exists in `us-east-1` and `ap-south-1`.
 
 Make sure your account has GPU instance quota in the chosen region — new accounts often default to 0 vCPUs for G/P-family instances, which will cause `RunInstances` to fail with `VcpuLimitExceeded`. Request increases in the AWS Service Quotas console under "Running On-Demand G and VT instances" or "Running On-Demand P instances".
+
+## Storage
+
+After picking an instance, `provision.py` asks two questions:
+
+```
+Storage type (s3, ebs, efs, none) default: s3:
+Storage size in GB default: 100:
+```
+
+Behavior by type:
+
+| Type   | What's created                                                  | Mounted at | Notes |
+|--------|-----------------------------------------------------------------|------------|-------|
+| `s3`   | An S3 bucket named `<workspace>-storage` only — **no IAM**      | `/mnt/s3`  | Mounted with [mountpoint-s3](https://github.com/awslabs/mountpoint-s3) via a systemd unit (persists across reboots). Bucket has `force_destroy=true` so `--destroy` deletes the bucket and its contents. **You must create the instance profile yourself** (this app never modifies IAM) and pass it via `--iam-instance-profile` or the interactive prompt — see below. |
+| `ebs`  | A standalone gp3 EBS data volume of `<size>` GB, attached as the second NVMe device | `/mnt/ebs` | Formatted `ext4` on first boot and added to `/etc/fstab` so it remounts automatically. Storage size is honored exactly. |
+| `efs`  | An EFS filesystem + mount target in the workspace's subnet      | `/mnt/efs` | Pay-as-you-go (`storage_size_gb` is informational). NFS port 2049 is opened in a dedicated EFS security group accepting only traffic from the instance's SG. |
+| `none` | Nothing extra                                                   | —          | Only the 100 GB root EBS volume exists. |
+
+### IAM setup for `s3` storage
+
+The app deliberately does not create or modify IAM. You need an EC2 instance profile in your account with S3 access to the bucket(s) you want the instance to mount. Create it once (and reuse it for every provision):
+
+```bash
+# 1. Create an IAM role with an EC2 trust policy
+cat > /tmp/trust-policy.json <<'EOF'
+{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Principal": {"Service": "ec2.amazonaws.com"},
+    "Action": "sts:AssumeRole"
+  }]
+}
+EOF
+aws iam create-role --role-name gpu-provisioner-s3 --assume-role-policy-document file:///tmp/trust-policy.json
+
+# 2. Attach an S3 access policy. The simplest is full S3 on all buckets;
+#    for production, scope to specific buckets.
+aws iam put-role-policy --role-name gpu-provisioner-s3 --policy-name s3-access --policy-document '{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": ["s3:ListBucket", "s3:GetBucketLocation"],
+      "Resource": "arn:aws:s3:::*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:AbortMultipartUpload", "s3:GetObjectAttributes"],
+      "Resource": "arn:aws:s3:::*/*"
+    }
+  ]
+}'
+
+# 3. Create the instance profile and add the role to it
+aws iam create-instance-profile --instance-profile-name gpu-provisioner-s3
+aws iam add-role-to-instance-profile --instance-profile-name gpu-provisioner-s3 --role-name gpu-provisioner-s3
+```
+
+Then provision with:
+
+```bash
+uv run provision.py --iam-instance-profile gpu-provisioner-s3
+# or just run interactively and enter the profile name at the prompt
+```
+
+If you skip the instance profile, the EC2 instance will boot without an IAM role and mountpoint-s3 will fail to authenticate at runtime — you'd need to set `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` on the instance another way.
+
+In every non-`none` case, a soft link `~/storage` is created in the `ubuntu` user's home directory pointing at the mount, so `cd ~/storage` always works regardless of storage type.
+
+**First-boot timing:** the mount happens during cloud-init (`user_data`), which runs in parallel with SSH coming up. Expect ~1–2 minutes after the SSH connection works before the mount is fully ready. `tail -f /var/log/provisioner-user-data.log` on the instance shows progress.
 
 ## AMI
 
