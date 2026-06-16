@@ -374,6 +374,10 @@ If a pattern matches no AMIs in your region the `data.aws_ami.dlami` lookup fail
 - AMI architecture (x86_64 vs arm64) is auto-detected based on the instance's CPU.
 - Every instance auto-installs `uv` to `/usr/local/bin` via Terraform `user_data` at first boot.
 
+## Roadmap
+
+GCP, Azure, and OCI support will be added soon!
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
