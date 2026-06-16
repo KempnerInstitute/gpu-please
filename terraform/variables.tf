@@ -4,6 +4,11 @@ variable "region" {
   default     = "us-east-1"
 }
 
+variable "availability_zone" {
+  description = "AZ within var.region where the subnet and instance are created. Must support the chosen instance type. provision.py picks one via ec2:DescribeInstanceTypeOfferings."
+  type        = string
+}
+
 variable "instance_type" {
   description = "EC2 instance type (e.g. g5.xlarge)"
   type        = string

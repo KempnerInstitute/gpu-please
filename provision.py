@@ -204,6 +204,38 @@ def filter_instances(instances: list[dict]) -> list[dict]:
     return [i for i in instances if not i.get("shared_or_fractional_gpu", False)]
 
 
+def pick_az_for_instance(instance_type: str, region: str) -> str:
+    """Return an availability zone in the region that supports the given instance type.
+
+    Many GPU instance types are only available in a subset of AZs (e.g. g7e is
+    not offered in us-east-1a). Picking the alphabetical-first AZ leads to a
+    confusing terraform apply failure. This helper queries AWS for the actual
+    set of supported AZs and returns the first one. Exits cleanly with an
+    actionable message if no AZ supports the instance.
+    """
+    ec2 = boto3.client("ec2", region_name=region)
+    try:
+        resp = ec2.describe_instance_type_offerings(
+            LocationType="availability-zone",
+            Filters=[{"Name": "instance-type", "Values": [instance_type]}],
+        )
+    except Exception as e:  # noqa: BLE001
+        console.print(
+            f"[red]Failed to check AZ support for {instance_type}:[/red] "
+            f"{_aws_error_message(e, 'ec2:DescribeInstanceTypeOfferings')}"
+        )
+        sys.exit(1)
+    azs = sorted(o["Location"] for o in resp.get("InstanceTypeOfferings", []))
+    if not azs:
+        console.print(
+            f"[red]No availability zones in {region} support {instance_type}.[/red] "
+            "Pick a different instance type or region (try `aws ec2 describe-instance-type-offerings "
+            "--location-type availability-zone --filters Name=instance-type,Values=" + instance_type + "`)."
+        )
+        sys.exit(1)
+    return azs[0]
+
+
 def check_availability(instances: list[dict], region: str) -> list[dict]:
     """Keep only instance types available in the given region via AWS API."""
     ec2 = boto3.client("ec2", region_name=region)
@@ -533,7 +565,7 @@ def display_table(instances: list[dict], prices: dict[str, float | None]) -> Non
     console.print(table)
 
 
-STORAGE_TYPES = ("s3", "ebs", "efs", "none")
+STORAGE_TYPES = ("s3", "ebs", "efs")
 DEFAULT_STORAGE_TYPE = "ebs"
 DEFAULT_STORAGE_SIZE_GB = 100
 
@@ -651,14 +683,14 @@ def prompt_storage_options(region: str = DEFAULT_REGION) -> tuple[str, int]:
     """
     console.print()
     console.print("  Checking AWS permissions for each storage type...")
-    availability: dict[str, str | None] = {"none": None}
-    for t in ("s3", "ebs", "efs"):
+    availability: dict[str, str | None] = {}
+    for t in STORAGE_TYPES:
         availability[t] = _probe_storage_permissions(t, region)
 
     # Default to the first available type in preference order.
-    preference = (DEFAULT_STORAGE_TYPE, "ebs", "efs", "none")
+    preference = (DEFAULT_STORAGE_TYPE, "ebs", "efs", "s3")
     default_type = next(
-        (t for t in preference if availability.get(t) is None), "none"
+        (t for t in preference if availability.get(t) is None), DEFAULT_STORAGE_TYPE
     )
 
     # Format option list with availability markers.
@@ -1371,6 +1403,13 @@ def provision_flow(
 
     console.print(f"\n[bold]Provisioning {selected['instance_type']}...[/bold]\n")
 
+    # Pick an AZ that actually supports this instance type. Some GPU types
+    # (e.g. g7e) are only in a subset of AZs in a region — without this,
+    # terraform apply fails halfway with an opaque "Unsupported AZ" error.
+    console.print(f"  Finding an AZ in {region} that supports {selected['instance_type']}...")
+    az = pick_az_for_instance(selected["instance_type"], region)
+    console.print(f"  Using AZ: [cyan]{az}[/cyan]")
+
     # Detect the user's public IP FIRST — if it fails (or they Ctrl+C the
     # manual-entry prompt), we haven't created any AWS resources yet, so
     # there's nothing to clean up.
@@ -1392,6 +1431,7 @@ def provision_flow(
     # Write tfvars
     write_tfvars(ws, {
         "region": region,
+        "availability_zone": az,
         "instance_type": selected["instance_type"],
         "key_pair_name": key_name,
         "workspace_name": workspace_name,

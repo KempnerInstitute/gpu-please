@@ -1,5 +1,7 @@
 # AWS GPU Instance Provisioner
 
+![AWS GPU Instance Provisioner](docs/images/gpu-please-banner.png)
+
 CLI tool to provision GPU EC2 instances on AWS using Terraform.
 
 ## Prerequisites

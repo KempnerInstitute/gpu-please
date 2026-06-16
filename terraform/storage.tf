@@ -30,10 +30,11 @@ resource "aws_s3_bucket" "storage" {
 
 resource "aws_ebs_volume" "storage" {
   count = local.is_ebs ? 1 : 0
-  # Use the same AZ as the subnet so the volume can attach to the instance.
-  # Reading from the AZ data source (not aws_instance.gpu) avoids a dependency
-  # cycle: aws_instance.gpu's user_data references this volume's id.
-  availability_zone = data.aws_availability_zones.available.names[0]
+  # Use the same AZ as the subnet (set by provision.py) so the volume can
+  # attach to the instance. Reading from var.availability_zone (not
+  # aws_instance.gpu) avoids a dependency cycle: aws_instance.gpu's user_data
+  # references this volume's id.
+  availability_zone = var.availability_zone
   size              = var.storage_size_gb
   type              = "gp3"
 
