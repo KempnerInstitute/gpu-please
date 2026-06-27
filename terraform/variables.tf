@@ -19,6 +19,11 @@ variable "key_pair_name" {
   type        = string
 }
 
+variable "public_key" {
+  description = "OpenSSH public key to register as the EC2 key pair. provision.py generates the key pair locally and keeps the private .pem in the workspace."
+  type        = string
+}
+
 variable "workspace_name" {
   description = "Unique name for this provisioned workspace"
   type        = string

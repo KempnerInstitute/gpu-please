@@ -74,7 +74,7 @@ aws sts get-caller-identity
 The principal you provision with needs:
 
 - **EC2:** `RunInstances`, `TerminateInstances`, `DescribeInstances`, `DescribeInstanceTypeOfferings`, `DescribeAvailabilityZones`, `DescribeImages`
-- **EC2 key pairs:** `CreateKeyPair`, `DeleteKeyPair`, `DescribeKeyPairs`
+- **EC2 key pairs:** `ImportKeyPair`, `DeleteKeyPair`, `DescribeKeyPairs`
 - **VPC + networking:** `CreateVpc`, `DeleteVpc`, `DescribeVpcs`, `CreateSubnet`, `DeleteSubnet`, `DescribeSubnets`, `CreateInternetGateway`, `AttachInternetGateway`, `DetachInternetGateway`, `DeleteInternetGateway`, `DescribeInternetGateways`, `CreateRouteTable`, `CreateRoute`, `AssociateRouteTable`, `DisassociateRouteTable`, `DeleteRouteTable`, `DescribeRouteTables`
 - **Security groups:** `CreateSecurityGroup`, `AuthorizeSecurityGroupIngress`, `AuthorizeSecurityGroupEgress`, `RevokeSecurityGroupIngress`, `RevokeSecurityGroupEgress`, `DeleteSecurityGroup`, `DescribeSecurityGroups`
 - **Tagging:** `CreateTags`, `DeleteTags`, `DescribeTags`

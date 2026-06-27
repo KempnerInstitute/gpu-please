@@ -831,45 +831,41 @@ def create_workspace(instance_type: str) -> Path:
     return ws
 
 
-def create_key_pair(workspace_name: str, workspace_dir: Path, region: str) -> str:
-    """Create an AWS key pair and save the .pem file. Returns the key pair name.
+def create_key_pair(workspace_name: str, workspace_dir: Path) -> tuple[str, str]:
+    """Generate an SSH key pair locally and return (key_name, public_key).
 
-    On failure, surfaces a clear error message and exits — the caller does not
-    have to worry about cleanup since the .pem file is only written after the
-    API call succeeds.
+    The private key is written to <workspace_dir>/<name>.pem (mode 0o400). The
+    OpenSSH public key is returned so Terraform can register it as an
+    aws_key_pair resource, which ties the key pair's lifecycle to
+    `terraform destroy` — no key pair is left behind in AWS.
     """
-    ec2 = boto3.client("ec2", region_name=region)
     key_name = workspace_name
-    try:
-        response = ec2.create_key_pair(KeyName=key_name, KeyType="rsa", KeyFormat="pem")
-    except Exception as e:  # noqa: BLE001
+    pem_path = workspace_dir / f"{key_name}.pem"
+    if shutil.which("ssh-keygen") is None:
         console.print(
-            f"[red]Failed to create AWS key pair '{key_name}':[/red] "
-            f"{_aws_error_message(e, 'ec2:CreateKeyPair')}"
+            "[red]ssh-keygen not found. Install OpenSSH to generate the SSH key pair.[/red]"
         )
         sys.exit(1)
-    pem_path = workspace_dir / f"{key_name}.pem"
     try:
-        # Atomic create at mode 0o400 so a Ctrl+C between write and chmod
-        # can never leave the .pem with default-umask permissions.
-        fd = os.open(str(pem_path), os.O_CREAT | os.O_WRONLY | os.O_EXCL, 0o400)
-        try:
-            os.write(fd, response["KeyMaterial"].encode())
-        finally:
-            os.close(fd)
-    except OSError as e:
-        # File system error AFTER AWS already created the key pair — try to
-        # roll back the AWS side so we don't orphan an unusable key pair.
-        console.print(f"[red]Failed to write {pem_path} ({e}); rolling back AWS key pair.[/red]")
-        try:
-            ec2.delete_key_pair(KeyName=key_name)
-        except Exception:  # noqa: BLE001
-            console.print(
-                f"[yellow]Could not clean up AWS key pair '{key_name}' — delete manually: "
-                f"aws ec2 delete-key-pair --key-name {key_name} --region {region}[/yellow]"
-            )
+        subprocess.run(
+            [
+                "ssh-keygen", "-t", "rsa", "-b", "4096", "-m", "PEM",
+                "-f", str(pem_path), "-N", "", "-q", "-C", key_name,
+            ],
+            check=True,
+        )
+    except (subprocess.CalledProcessError, OSError) as e:
+        console.print(f"[red]Failed to generate SSH key pair: {e}[/red]")
         sys.exit(1)
-    return key_name
+    # ssh-keygen writes the private key 0o600; tighten to 0o400 to match prior behavior.
+    try:
+        os.chmod(pem_path, 0o400)
+    except OSError:
+        pass
+    pub_path = Path(f"{pem_path}.pub")
+    public_key = pub_path.read_text().strip()
+    pub_path.unlink(missing_ok=True)
+    return key_name, public_key
 
 
 def delete_key_pair(key_name: str, region: str) -> None:
@@ -1478,7 +1474,7 @@ def provision_flow(
     console.print(f"  Workspace: [cyan]{workspace_name}[/cyan]")
 
     console.print("  Creating SSH key pair...")
-    key_name = create_key_pair(workspace_name, ws, region)
+    key_name, public_key = create_key_pair(workspace_name, ws)
 
     # Determine AMI architecture
     ami_arch = _ami_arch_for_instance(selected)
@@ -1494,6 +1490,7 @@ def provision_flow(
         "availability_zone": az,
         "instance_type": selected["instance_type"],
         "key_pair_name": key_name,
+        "public_key": public_key,
         "workspace_name": workspace_name,
         "allowed_ssh_cidr": f"{my_ip}/32",
         "ami_architecture": ami_arch,

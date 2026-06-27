@@ -91,6 +91,17 @@ resource "aws_security_group" "gpu_ssh" {
   }
 }
 
+# ---------- key pair ----------
+
+resource "aws_key_pair" "gpu" {
+  key_name   = var.key_pair_name
+  public_key = var.public_key
+
+  tags = {
+    Name = var.workspace_name
+  }
+}
+
 # ---------- AMI ----------
 
 data "aws_ami" "dlami" {
@@ -118,7 +129,7 @@ data "aws_ami" "dlami" {
 resource "aws_instance" "gpu" {
   ami                         = data.aws_ami.dlami.id
   instance_type               = var.instance_type
-  key_name                    = var.key_pair_name
+  key_name                    = aws_key_pair.gpu.key_name
   subnet_id                   = aws_subnet.public.id
   vpc_security_group_ids      = [aws_security_group.gpu_ssh.id]
   associate_public_ip_address = true
